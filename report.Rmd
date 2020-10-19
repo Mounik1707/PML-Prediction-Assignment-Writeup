@@ -1,0 +1,337 @@
+---
+title: "pmlreport"
+author: "G S Mounik"
+date: "10/19/2020"
+output: html_document
+---
+
+```{r,warning=FALSE,message=FALSE,include=FALSE,echo=FALSE}
+
+library(dplyr)
+library(ggplot2)
+library(DT)
+library(caret)
+library(knitr)
+library(corrplot)
+library(plotly)
+library(correlationfunnel)
+library(GGally)
+library(e1071)
+#library(rattle)
+```
+
+
+
+```{r}
+dFtraining <- read.csv("pml-training.csv", stringsAsFactors = F,na.strings = c("","NA","#DIV/0!"))
+dFtesting <- read.csv("pml-testing.csv", stringsAsFactors = F,na.strings = c("","NA","#DIV/0!"))
+dim(dFtraining); dim(dFtesting)
+```
+  
+
+```{r}
+set.seed(101)
+iNtraining <- createDataPartition(dFtraining$classe, p = 0.8, list = F)
+dFvalue <- dFtraining[-iNtraining,]
+dFtraining <- dFtraining[iNtraining,]
+dim(dFtraining); dim(dFvalue)
+```
+  
+
+
+```{r}
+table(dFtraining$classe)/nrow(dFtraining)
+```
+  
+ 
+
+```{r}
+beltmissing <- sapply(select(dFtraining,names(dFtraining)[grepl("_belt",names(dFtraining))]),
+                    function(x) sum(is.na(x)))
+beltmissing
+```
+
+
+```{r}
+armmissing <- sapply(select(dFtraining,names(dFtraining)[grepl("_arm",names(dFtraining))]),
+                   function(x) sum(is.na(x)))
+armmissing
+```  
+
+
+```{r}
+for_ear_miss <- sapply(select(dFtraining,
+                              names(dFtraining)[grepl("_forearm",names(dFtraining))]),
+                       function(x) sum(is.na(x)))
+for_ear_miss
+```  
+
+
+```{r}
+Dumb_Bell_Missing <- sapply(select(dFtraining,
+                               names(dFtraining)[grepl("_dumbbell",names(dFtraining))]),
+                        function(x) sum(is.na(x)))
+Dumb_Bell_Missing
+``` 
+
+ 
+
+```{r}
+Col_2Dr <- c(names(beltmissing[beltmissing != 0]), 
+                  names(armmissing[armmissing != 0]),
+                  names(for_ear_miss[for_ear_miss != 0]),
+                  names(Dumb_Bell_Missing[Dumb_Bell_Missing != 0]))
+length(Col_2Dr)
+```
+
+
+
+```{r}
+dF_anly <- tbl_df(dFtraining %>% 
+                      select(-Col_2Dr,
+                             -c(X,user_name, raw_timestamp_part_1, 
+                                raw_timestamp_part_2, cvtd_timestamp, 
+                                new_window,num_window)))
+dF_anly$classe <- as.factor(dF_anly$classe)
+dF_anly[,1:52] <- lapply(dF_anly[,1:52],as.numeric)
+dim(dF_anly)
+```
+
+
+
+```{r,fig.height=10,fig.width=10}
+corres_Column <- cor(select(dF_anly, -classe))
+diag(corres_Column) <- 0
+corres_Column <- which(abs(corres_Column)>0.8,arr.ind = T)
+corres_Column <- unique(row.names(corres_Column))
+corrplot(cor(select(dF_anly,corres_Column)),
+         type="upper", order="hclust",method = "number")
+```
+
+
+```{r}
+#correlationfunnel website: https://business-science.github.io/correlationfunnel/
+corr_funl_df <- dF_anly %>% binarize(n_bins = 4, thresh_infreq = 0.01)
+```
+
+
+
+```{r,fig.align="center",fig.width=8,fig.height=10}
+Corres_a <- corr_funl_df %>% correlate(target = classe__A) 
+Corres_a %>% plot_correlation_funnel(interactive = T,limits = c(-0.5,0.5))
+```
+
+
+```{r, echo=FALSE, eval=FALSE}
+temporary_a <- head(Corres_a %>% mutate(corr = abs(correlation)) %>% 
+  arrange(desc(corr)) %>% select(feature) %>% unique(),20)
+temporary_a$feature[which(temporary_a$feature %in% corres_Column)]
+```
+
+
+
+```{r,fig.align="center",fig.width=8,fig.height=10}
+Corres_b <- corr_funl_df %>% correlate(target = classe__B)
+Corres_b %>% plot_correlation_funnel(interactive = T,limits = c(-0.5,0.5))
+```
+
+
+```{r, echo=FALSE, eval=FALSE}
+temporary_b <- head(Corres_b %>% mutate(corr = abs(correlation)) %>% 
+  arrange(desc(corr)) %>% select(feature) %>% unique(),20)
+temporary_b$feature[which(temporary_b$feature %in% corres_Column)]
+```
+
+
+```{r,fig.align="center",fig.width=8,fig.height=10}
+Corres_c <- corr_funl_df %>% correlate(target = classe__C)
+Corres_c %>% plot_correlation_funnel(interactive = T,limits = c(-0.5,0.5))
+```
+
+
+```{r, echo=FALSE, eval=FALSE}
+Temporary_c <- head(Corres_c %>% mutate(corr = abs(correlation)) %>% 
+  arrange(desc(corr)) %>% select(feature) %>% unique(),20)
+Temporary_c$feature[which(Temporary_c$feature %in% corres_Column)]
+```
+
+
+```{r,fig.align="center",fig.width=8,fig.height=10}
+Corres_d <- corr_funl_df %>% correlate(target = classe__D)
+Corres_d %>% plot_correlation_funnel(interactive = T,limits = c(-0.5,0.5))
+```
+
+
+```{r, echo=FALSE, eval=FALSE}
+# this section is to find the top features for this classe which are not correlated with others
+TemporarY_d <- head(Corres_d %>% mutate(corr = abs(correlation)) %>% 
+  arrange(desc(corr)) %>% select(feature) %>% unique(),20)
+TemporarY_d$feature[which(TemporarY_d$feature %in% corres_Column)]
+```
+
+
+```{r,fig.align="center",fig.width=8,fig.height=10}
+CorreS_e <- corr_funl_df %>% correlate(target = classe__E)
+CorreS_e %>% plot_correlation_funnel(interactive = T,limits = c(-0.5,0.5))
+```
+
+
+```{r, echo=FALSE, eval=FALSE}
+
+TemporarY_e <- head(CorreS_e %>% mutate(corr = abs(correlation)) %>% 
+  arrange(desc(corr)) %>% select(feature) %>% unique(),20)
+TemporarY_e$feature[which(TemporarY_e$feature %in% corres_Column)]
+```
+
+
+```{r}
+#subseting dF_anly
+Colum_a <- c("magnet_arm_x", "pitch_forearm" , "magnet_dumbbell_y", 
+           "roll_forearm", "gyros_dumbbell_y") 
+Colum_b <- c("magnet_dumbbell_y", "magnet_dumbbell_x" , "roll_dumbbell" , 
+           "magnet_belt_y" , "accel_dumbbell_x" )
+Colum_c <- c("magnet_dumbbell_y", "roll_dumbbell" , "accel_dumbbell_y" , 
+           "magnet_dumbbell_x", "magnet_dumbbell_z")
+Colum_d <- c("pitch_forearm" , "magnet_arm_y" , "magnet_forearm_x",
+           "accel_dumbbell_y", "accel_forearm_x")
+Colum_e <- c("magnet_belt_y" , "magnet_belt_z" , "roll_belt", 
+           "gyros_belt_z" , "magnet_dumbbell_y")
+FinaL_Colum <- character()
+for(c in c(Colum_a,Colum_b,Colum_c,Colum_d,Colum_e)){
+  FinaL_Colum <- union(FinaL_Colum, c)
+}
+dF_AnLy_2 <- dF_anly %>% select(FinaL_Colum, classe)
+data.frame("arm" = sum(grepl("_arm",FinaL_Colum)), 
+           "forearm" = sum(grepl("_forearm",FinaL_Colum)),
+           "belt" = sum(grepl("_belt",FinaL_Colum)),
+           "dumbbell" = sum(grepl("_dumbbell",FinaL_Colum)))
+```
+
+
+```{r, fig.align="center",fig.height=15,fig.width=15}
+MyDenS <- function(data, mapping, ...) {
+  ggplot(data = data, mapping=mapping) +
+    geom_density(..., alpha = 0.3)+scale_fill_brewer(palette="Set2") 
+}
+MyPoinT <- function(data, mapping, ...) {
+  ggplot(data = data, mapping=mapping) +
+    geom_point(..., alpha = 0.1)+ scale_fill_brewer(palette="Set2") 
+}
+ggpairs(dF_AnLy_2, columns = 1:5,aes(color = classe),
+        lower = list(continuous = MyPoinT),diag = list(continuous = MyDenS))
+```
+
+```{r,fig.align="center",fig.height=15,fig.width=15}
+ggpairs(dF_AnLy_2, columns = 6:10,aes(color = classe),
+        lower = list(continuous = MyPoinT),diag = list(continuous = MyDenS))
+```
+
+```{r,fig.align="center",fig.height=15,fig.width=15}
+ggpairs(dF_AnLy_2, columns = 11:17,aes(color = classe),
+        lower = list(continuous = MyPoinT),diag = list(continuous = MyDenS))
+```
+
+
+```{r}
+dF_TrainF <- dFtraining %>% select(FinaL_Colum,classe)
+dF_ValuF <- dFvalue %>% select(FinaL_Colum,classe)
+dF_TrainF[,1:17] <- sapply(dF_TrainF[,1:17],as.numeric)
+dF_ValuF[,1:17] <- sapply(dF_ValuF[,1:17],as.numeric)
+levels <- c("A", "B", "C", "D", "E")
+Prep_RopObj <- preProcess(dF_TrainF[,-18],method = c("center","scale","BoxCox"))
+X_Tain <- predict(Prep_RopObj,select(dF_TrainF,-classe))
+Y_Tain <- factor(dF_TrainF$classe,levels=levels)
+X_vaL <- predict(Prep_RopObj,select(dF_ValuF,-classe))
+Y_vaL <- factor(dF_ValuF$classe,levels=levels)
+trControl <- trainControl(method="cv", number=5)
+CT_Modl <- train(x = X_Tain,y = Y_Tain, 
+                 method = "rpart", trControl = trControl)
+
+RF_Modl<- train(x = X_Tain,y = Y_Tain, 
+                 method = "rf", trControl = trControl,verbose=FALSE, metric = "Accuracy")
+
+
+GBM_Modl <- train(x = X_Tain,y = Y_Tain, 
+                  method = "gbm",trControl=trControl, verbose=FALSE)
+
+SVM_Modl <- svm(x = X_Tain,y = Y_Tain,
+                kernel = "polynomial", cost = 10)
+```
+
+
+```{r}
+confusionMatrix(predict(CT_Modl,X_vaL),Y_vaL)
+```
+
+
+```{r}
+confusionMatrix(predict(RF_Modl,X_vaL),Y_vaL)
+```
+
+```{r}
+plot(RF_Modl$finalModel,main="Error VS no of tree")
+```
+
+```{r}
+confusionMatrix(predict(GBM_Modl,X_vaL),Y_vaL)
+```
+
+```{r}
+confusionMatrix(predict(SVM_Modl,X_vaL),Y_vaL)
+```
+
+```{r}
+Test2_dF <- dFtesting %>% select(FinaL_Colum,problem_id)
+Test_x <- Test2_dF %>% select(FinaL_Colum)
+  
+Res_ult <- data.frame("problem_id" = dFtesting$problem_id,
+                     "PREDICTION_RF" = predict(RF_Modl,Test_x),
+                     "PREDICTION_GBM" = predict(GBM_Modl,Test_x),
+                     "PREDICTION_SVM" = predict(SVM_Modl,Test_x))
+Res_ult
+```
+
+```{r}
+dF_TrainF2 <- tbl_df(dFtraining %>% 
+                      select(-Col_2Dr,
+                             -c(X,user_name, raw_timestamp_part_1, 
+                                raw_timestamp_part_2, cvtd_timestamp, 
+                                new_window,num_window)))
+X_Tain2 <- dF_TrainF2 %>% select(-classe)
+X_Tain2 <- sapply(X_Tain2,as.numeric)
+Y_Tain2 <- factor(dF_TrainF2$classe,levels=levels)  
+dF_ValuF2 <- tbl_df(dFvalue %>% 
+                      select(-Col_2Dr,
+                             -c(X,user_name, raw_timestamp_part_1, 
+                                raw_timestamp_part_2, cvtd_timestamp, 
+                                new_window,num_window)))
+X_vaL2 <- dF_ValuF2 %>% select(-classe)
+X_vaL2 <- sapply(X_vaL2,as.numeric)
+Y_vaL2 <- factor(dF_ValuF2$classe,levels=levels) 
+F2_Test_dF <- tbl_df(dFtesting %>% 
+                      select(-Col_2Dr,
+                             -c(X,user_name, raw_timestamp_part_1, 
+                                raw_timestamp_part_2, cvtd_timestamp, 
+                                new_window,num_window)))
+X_2tesT <- F2_Test_dF %>% select(-problem_id)
+X_2tesT <- sapply(X_2tesT,as.numeric)
+ID_pb <- dF_ValuF2$classe
+library(doParallel)
+Cores_N <- makeCluster(detectCores() - 1)
+registerDoParallel(cores=Cores_N)
+getDoParWorkers() 
+RF2_Modl <- train(x = X_Tain2,y = Y_Tain2, method = "rf", 
+                 metric = "Accuracy", 
+                 trControl=trainControl(method = "cv", number = 4, 
+                                        p= 0.60, allowParallel = TRUE ))
+```
+
+```{r}
+
+Res_ult2 <- data.frame("problem_id" = dFtesting$problem_id,
+                     "PREDICTION_RF" = predict(RF_Modl,Test_x),
+                     "PREDICTION_GBM" = predict(GBM_Modl,Test_x),
+                     "PREDICTION_SVM" = predict(SVM_Modl,Test_x),
+                     "PREDICTION_RF2_ALL_COL"=predict(RF2_Modl,X_2tesT))
+Res_ult2
+```
